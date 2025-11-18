@@ -113,9 +113,14 @@ class CartasMalditasApp:
         self.update_ui()
 
     def build_deck(self):
-        """Construye un mazo con 8 cartas por palo (2..9)."""
+        """Construye un mazo con:
+        - ♥ y ♦: 2–10
+        - ♣ y ♠: 2–A (2–14, con J/Q/K/A como 11–14)
+        """
         self.deck = []
-        for value in range(2, 10):
+
+        # 2–10 para TODOS los palos
+        for value in range(2, 11):  # 2..10
             # ♥ pociones
             self.deck.append({"suit": "♥", "type": "potion", "value": value})
             # ♦ armas
@@ -124,6 +129,12 @@ class CartasMalditasApp:
             self.deck.append({"suit": "♣", "type": "monster", "value": value})
             # ♠ monstruos
             self.deck.append({"suit": "♠", "type": "monster", "value": value})
+
+        # Figuras J(11), Q(12), K(13), A(14) SOLO en palos negros (♣ y ♠)
+        for value in range(11, 15):  # 11..14
+            self.deck.append({"suit": "♣", "type": "monster", "value": value})
+            self.deck.append({"suit": "♠", "type": "monster", "value": value})
+
 
     # ==========================
     # MANEJO DE SALAS
@@ -178,7 +189,21 @@ class CartasMalditasApp:
             "monster": "Monstruo"
         }.get(card["type"], "?")
 
-        return f"{card['suit']} {card['value']} ({type_name})"
+        v = card["value"]
+        if v == 11:
+            rank = "J"
+        elif v == 12:
+            rank = "Q"
+        elif v == 13:
+            rank = "K"
+        elif v == 14:
+            rank = "A"
+        else:
+            rank = str(v)
+
+        return f"{card['suit']} {rank} ({type_name})"
+
+
 
     # ==========================
     # LÓGICA AL JUGAR CARTAS
@@ -216,26 +241,35 @@ class CartasMalditasApp:
             self.update_cards_ui()
 
     def play_monster(self, card):
-        """Resuelve el combate contra un monstruo."""
+        """Resuelve el combate contra un monstruo considerando el sistema de límite."""
+
         monster_value = card["value"]
 
-        if self.equipped_weapon is not None:
-            weapon_value = self.equipped_weapon["value"]
-            damage_received = monster_value - weapon_value
-            if damage_received < 0:
-                damage_received = 0
-
-            self.player_hp -= damage_received
-
-            # El arma se consume
-            self.equipped_weapon = None
-
-            # Contamos al monstruo como derrotado
-            self.score += 1
-        else:
-            # Mano limpia → daño completo
+        # Si NO hay arma equipada → daño completo
+        if self.equipped_weapon is None:
             self.player_hp -= monster_value
             self.score += 1
+            return
+
+        weapon_limit = self.equipped_weapon["limit"]
+
+        # ¿El arma puede bloquear este monstruo?
+        if monster_value <= weapon_limit:
+            # Muerte exitosa sin recibir daño
+            self.score += 1
+
+            # Reducir límite del arma al valor del monstruo derrotado
+            self.equipped_weapon["limit"] = monster_value
+
+            # Si querés ver el límite actual en consola:
+            # print("Nuevo límite del arma:", self.equipped_weapon["limit"])
+
+        else:
+            # No puede matar → recibimos daño completo
+            self.player_hp -= monster_value
+            self.score += 1
+            # El arma NO se pierde y NO cambia su límite
+
 
     def play_potion(self, card):
         """Aplica el efecto de una poción."""
@@ -244,8 +278,14 @@ class CartasMalditasApp:
             self.player_hp = MAX_HP
 
     def play_weapon(self, card):
-        """Equipa un arma (reemplaza la anterior)."""
-        self.equipped_weapon = card
+        """Equipa un arma y asigna su límite inicial igual a su valor."""
+        self.equipped_weapon = {
+            "suit": card["suit"],
+            "type": "weapon",
+            "value": card["value"],
+            "limit": card["value"]  # nuevo: límite inicial = daño del arma
+        }
+
 
     # ==========================
     # UI GENERAL Y FIN DE RUN
@@ -259,8 +299,9 @@ class CartasMalditasApp:
 
         if self.equipped_weapon is not None:
             self.weapon_label.config(
-                text=f"Arma: {self.equipped_weapon['value']}"
+                text=f"Arma: {self.equipped_weapon['value']} (limite {self.equipped_weapon['limit']})"
             )
+
         else:
             self.weapon_label.config(text="Arma: (ninguna)")
 
