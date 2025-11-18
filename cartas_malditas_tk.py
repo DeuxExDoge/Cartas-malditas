@@ -132,10 +132,12 @@ class CartasMalditasApp:
     # ============================================================
 
     def skip_room(self):
-        """Salta la sala: mueve la sala al final del mazo y recarga después."""
+        """Salta la sala solo si está completa (4 cartas sin jugar)."""
         if not self.skip_available:
             return
-        if not self.room_cards:
+
+        # Solo permitir salto si la sala tiene exactamente 4 cartas
+        if len(self.room_cards) != 4:
             return
 
         # Mandamos la sala actual al final del mazo
@@ -146,6 +148,7 @@ class CartasMalditasApp:
 
         self.next_room()
         self.update_ui()
+
 
     # ============================================================
     #      MANEJO DE SALAS
@@ -278,11 +281,15 @@ class CartasMalditasApp:
         else:
             self.weapon_label.config(text="Arma: (ninguna)")
 
-        # Estado del botón de saltar sala
-        if self.skip_available and self.room_cards:
+        # Estado del botón de saltar sala:
+        # solo disponible si:
+        # - el salto está disponible
+        # - la sala está completa (4 cartas)
+        if self.skip_available and len(self.room_cards) == 4:
             self.skip_button.config(state="normal", text="Saltar sala (listo)")
         else:
             self.skip_button.config(state="disabled", text="Saltar sala (en recarga)")
+
 
     def end_run(self, victory):
         for btn in self.card_buttons:
