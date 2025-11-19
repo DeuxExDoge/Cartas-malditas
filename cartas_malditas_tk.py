@@ -19,21 +19,29 @@ class CartasMalditasApp:
         self.score = 0
         self.skip_available = True
 
+        # Seed de la run actual y RNG propio
+        self.current_seed = None
+        self.rng = random.Random()
+
         # UI SUPERIOR
         top_frame = tk.Frame(root)
         top_frame.pack(pady=10)
 
-        self.hp_label = tk.Label(top_frame, text="HP: 20", width=15)
+        self.hp_label = tk.Label(top_frame, text="HP: 20", width=15, height=3)
         self.hp_label.grid(row=0, column=0, padx=5)
 
-        self.weapon_label = tk.Label(top_frame, text="Arma: (ninguna)", width=20)
+        self.weapon_label = tk.Label(top_frame, text="Arma: (ninguna)", width=20, height=3)
         self.weapon_label.grid(row=0, column=1, padx=5)
 
-        self.deck_label = tk.Label(top_frame, text="Mazo: 0", width=15)
+        self.deck_label = tk.Label(top_frame, text="Mazo: 0", width=15, height=3)
         self.deck_label.grid(row=0, column=2, padx=5)
 
-        self.score_label = tk.Label(top_frame, text="Puntuación: 0", width=20)
+        self.score_label = tk.Label(top_frame, text="Puntuación: 0", width=20, height=3)
         self.score_label.grid(row=0, column=3, padx=5)
+
+        # Label para mostrar la seed actual
+        self.seed_label = tk.Label(top_frame, text="Seed: -", width=30)
+        self.seed_label.grid(row=1, column=0, columnspan=4, pady=5)
 
         # UI CARTAS SALA
         room_frame = tk.Frame(root)
@@ -67,44 +75,76 @@ class CartasMalditasApp:
         )
         self.carry_button.grid(row=0, column=1, padx=5)
 
-        # CONTROL (Reiniciar + Saltar sala)
+        # CONTROL (botones de partida y salto de sala)
         control_frame = tk.Frame(root)
         control_frame.pack(pady=10)
 
-        self.restart_button = tk.Button(
+        # Nueva partida con seed distinta
+        self.new_run_button = tk.Button(
             control_frame,
-            text="Reiniciar partida",
+            text="Nueva partida (seed aleatoria)",
             command=self.start_new_run
         )
-        self.restart_button.pack()
+        self.new_run_button.pack()
 
+        # Repetir la misma seed
+        self.repeat_seed_button = tk.Button(
+            control_frame,
+            text="Repetir run (misma seed)",
+            command=self.restart_with_same_seed
+        )
+        self.repeat_seed_button.pack(pady=5)
+
+        # Botón para saltar sala
         self.skip_button = tk.Button(
             control_frame,
-            text="Saltar sala (listo)",
+            text="Saltar sala",
             command=self.skip_room
         )
         self.skip_button.pack(pady=5)
 
-        # INICIAR PARTIDA
+        # INICIAR PRIMERA PARTIDA
         self.start_new_run()
 
     # ============================================================
-    #      INICIAR PARTIDA (ARREGLADO — YA NO ESTÁ MAL INDENTADO)
+    #      SEED Y REINICIO
     # ============================================================
 
-    def start_new_run(self):
+    def restart_with_same_seed(self):
+        """Reinicia la partida reutilizando la misma seed de la run actual."""
+        if self.current_seed is None:
+            self.start_new_run()
+        else:
+            self.start_new_run(seed=self.current_seed)
+
+    def start_new_run(self, seed=None):
+        """Reinicia todo el estado del juego y genera (o reutiliza) la seed."""
+        if seed is None:
+            # Seed nueva aleatoria
+            self.current_seed = random.randrange(1, 2**32)
+        else:
+            # Reutilizar seed específica
+            self.current_seed = seed
+
+        # RNG propio basado en la seed
+        self.rng = random.Random(self.current_seed)
+
+        # Reset de estado
         self.player_hp = MAX_HP
         self.equipped_weapon = None
         self.score = 0
         self.carry_card = None
         self.skip_available = True
 
+        # Construir mazo y barajarlo con la seed
         self.build_deck()
-        random.shuffle(self.deck)
+        self.rng.shuffle(self.deck)
 
+        # Habilitar botones de cartas
         for btn in self.card_buttons:
             btn.config(state="normal")
 
+        # Generar primera sala
         self.next_room()
         self.update_ui()
 
@@ -113,6 +153,10 @@ class CartasMalditasApp:
     # ============================================================
 
     def build_deck(self):
+        """Mazo:
+        - ♥ y ♦: 2–10
+        - ♣ y ♠: 2–A (11=J,12=Q,13=K,14=A)
+        """
         self.deck = []
 
         # 2–10 para todos los palos
@@ -122,13 +166,13 @@ class CartasMalditasApp:
             self.deck.append({"suit": "♣", "type": "monster", "value": value})
             self.deck.append({"suit": "♠", "type": "monster", "value": value})
 
-        # Figuras J/Q/K/A solo en ♣ y ♠
+        # Figuras J/Q/K/A solo en ♣ y ♠ (monstruos fuertes)
         for value in range(11, 15):
             self.deck.append({"suit": "♣", "type": "monster", "value": value})
             self.deck.append({"suit": "♠", "type": "monster", "value": value})
 
     # ============================================================
-    #      MECÁNICA DE SALTAR SALA (FUNCIONA 100%)
+    #      MECÁNICA DE SALTAR SALA
     # ============================================================
 
     def skip_room(self):
@@ -149,7 +193,6 @@ class CartasMalditasApp:
         self.next_room()
         self.update_ui()
 
-
     # ============================================================
     #      MANEJO DE SALAS
     # ============================================================
@@ -164,6 +207,7 @@ class CartasMalditasApp:
         while len(self.room_cards) < 4 and self.deck:
             self.room_cards.append(self.deck.pop())
 
+        # Si no hay cartas ni en sala ni en mazo → fin de partida
         if not self.room_cards and not self.deck:
             self.end_run(victory=self.player_hp > 0)
             return
@@ -220,6 +264,7 @@ class CartasMalditasApp:
             self.end_run(False)
             return
 
+        # Si queda solo 1 carta en la sala → se arrastra y pasás de sala
         if len(self.room_cards) == 1:
             # Recarga del salto tras pasar sala normalmente
             self.skip_available = True
@@ -231,9 +276,11 @@ class CartasMalditasApp:
             self.update_cards_ui()
 
     def play_monster(self, card):
+        """Combate con arma que se desgasta según el último monstruo válido."""
         monster_value = card["value"]
 
         if self.equipped_weapon is None:
+            # Mano limpia
             self.player_hp -= monster_value
             self.score += 1
             return
@@ -241,13 +288,17 @@ class CartasMalditasApp:
         weapon_value = self.equipped_weapon["value"]
         weapon_limit = self.equipped_weapon["limit"]
 
-        if monster_value < weapon_limit:
+        if monster_value <= weapon_limit:
+            # El arma puede usarse contra este monstruo
             damage = monster_value - weapon_value
             if damage < 0:
                 damage = 0
             self.player_hp -= damage
+
+            # El arma ahora solo sirve contra monstruos menores a este
             self.equipped_weapon["limit"] = monster_value
         else:
+            # El arma no sirve para este nivel → daño completo
             self.player_hp -= monster_value
 
         self.score += 1
@@ -258,11 +309,12 @@ class CartasMalditasApp:
             self.player_hp = MAX_HP
 
     def play_weapon(self, card):
+        """Equipa un arma con límite inicial muy alto (puede usarse contra cualquiera al inicio)."""
         self.equipped_weapon = {
             "suit": card["suit"],
             "type": "weapon",
             "value": card["value"],
-            "limit": 15
+            "limit": 15  # monstruos van de 2 a 14
         }
 
     # ============================================================
@@ -274,10 +326,21 @@ class CartasMalditasApp:
         self.deck_label.config(text=f"Mazo: {len(self.deck)}")
         self.score_label.config(text=f"Puntuación: {self.score}")
 
+        # Seed actual
+        if self.current_seed is not None:
+            self.seed_label.config(text=f"Seed: {self.current_seed}")
+        else:
+            self.seed_label.config(text="Seed: -")
+
         if self.equipped_weapon:
-            self.weapon_label.config(
-                text=f"Arma: {self.equipped_weapon['value']} (límite < {self.equipped_weapon['limit']})"
-            )
+            if self.equipped_weapon["limit"] == 15:
+                self.weapon_label.config(
+                text=f"Arma: {self.equipped_weapon['value']}"
+                )
+            else:
+                self.weapon_label.config(
+                text=f"Arma: {self.equipped_weapon['value']} (límite <= {self.equipped_weapon['limit']})"
+                )
         else:
             self.weapon_label.config(text="Arma: (ninguna)")
 
@@ -286,10 +349,9 @@ class CartasMalditasApp:
         # - el salto está disponible
         # - la sala está completa (4 cartas)
         if self.skip_available and len(self.room_cards) == 4:
-            self.skip_button.config(state="normal", text="Saltar sala (listo)")
+            self.skip_button.config(state="normal", text="Saltar sala")
         else:
-            self.skip_button.config(state="disabled", text="Saltar sala (en recarga)")
-
+            self.skip_button.config(state="disabled", text="Saltar sala(no disponible)")
 
     def end_run(self, victory):
         for btn in self.card_buttons:
@@ -297,11 +359,19 @@ class CartasMalditasApp:
 
         self.skip_button.config(state="disabled")
 
-        msg = (
-            f"¡Victoria!\nHP restante: {self.player_hp}\nPuntuación: {self.score}"
-            if victory else
-            f"Derrota...\nPuntuación: {self.score}"
-        )
+        if victory:
+            msg = (
+                "¡Victoria!\n"
+                f"HP restante: {self.player_hp}\n"
+                f"Puntuación: {self.score}\n"
+                f"Seed: {self.current_seed}"
+            )
+        else:
+            msg = (
+                "Derrota...\n"
+                f"Puntuación: {self.score}\n"
+                f"Seed: {self.current_seed}"
+            )
 
         messagebox.showinfo("Fin de la partida", msg)
 
